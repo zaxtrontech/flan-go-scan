@@ -1,18 +1,17 @@
-FROM cgr.dev/chainguard/go:latest AS builder
-
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
-
 COPY go.mod go.sum ./
 RUN go mod download
-
 COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o flan-go-scan .
 
-RUN CGO_ENABLED=0 go build -o flan ./cmd/flan
+FROM alpine:latest
+RUN apk add --no-cache nmap nmap-scripts ca-certificates
 
-FROM cgr.dev/chainguard/static:latest
+WORKDIR /app
+COPY --from=builder /app/flan-go-scan .
 
-COPY --from=builder /app/flan /flan
-COPY --from=builder /app/config /config
-COPY --from=builder /app/ips.txt /ips.txt
+# Create reports directory and set full write permissions
+RUN mkdir -p /app/reports && chmod -R 777 /app/reports
 
-ENTRYPOINT ["/flan", "-c=/config/config.yaml"]
+CMD ["./flan-go-scan"]
